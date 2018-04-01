@@ -6,7 +6,70 @@ import web3, {
 import styled, { injectGlobal } from 'styled-components';
 
 class TodoList extends Component {
-  render() {
+    constructor(props) {
+        super(props);
+
+        this.state = {
+            todoItems: [],
+            newItem: '',
+            account: web3.eth.accounts[0],
+            pending: false,
+            calling: false
+        };
+
+        this.handleSubmit = this.handleSubmit.bind(this);
+        this.deleteTodoItem = this.deleteTodoItem.bind(this);
+    }
+
+    async componentWillMount() {
+        this.todoList = await selectContractInstance(TodoListContract);
+
+        const todoItems = await this.getTodoItems();
+        this.setState({ todoItems });
+    }
+
+    async handleSubmit({ key }) {
+        if (key !== 'Enter') return;
+
+        this.setState({ pending: true });
+        const todoList = await selectContractInstance(TodoListContract);
+        await todoList.addTodoItem(this.state.newItem, { from: this.state.account});
+
+        const todoItems = await this.getTodoItems();
+
+        this.setState({ todoItems, newItem: '', pending: false });
+    }
+
+    async getTodoItems() {
+        this.setState({ calling: true });
+
+        const todoItemsResp = await this.todoList.getTodoItems.call();
+        const todoItems = mapReponseToJSON(
+            todoItemsResp, ['value', 'completed'], 'arrayOfObject'
+        );
+
+        this.setState({ calling: false });
+        return todoItems;
+    }
+
+    async deleteTodoItem(position) {
+        this.setState({ pending: true });
+        await this.todoList.deleteTodoItem(position, { from: this.state.account });
+        const todoItems = await this.getTodoItems();
+
+        this.setState({ todoItems, pending: false });
+    }
+
+    async toggleTodoItem(position) {
+        this.setState({ pending: true });
+        await this.todoList.toggleItemComplete(position, { from: this.state.account });
+        const todoItems = await this.getTodoItems();
+
+        this.setState({ todoItems, pending: false });
+    }
+
+    render() {
+        console.log(this.state.todoItems);
     return (
       <Container>
         <Header>
@@ -24,12 +87,9 @@ class TodoList extends Component {
             <List>
               {this.state.todoItems.map((item, itemIndex) =>
                 <TodoItem key={itemIndex}>
-                  <ItemLabel>{item.value}</ItemLabel>
-                  <DestroyBtn
-                    onClick={() => this.deleteTodoItem(itemIndex)}
-                  >
-                    ×
-                  </DestroyBtn>
+                  <ItemLabel>{item.completed ? <strike>{item.value}</strike> : item.value}</ItemLabel>
+                    <DestroyBtn onClick={() => this.deleteTodoItem(itemIndex)}>×</DestroyBtn>
+                    <CompleteBtn onClick={() => this.toggleTodoItem(itemIndex)}>{item.completed ? 'undo' : 'mark as done'}</CompleteBtn>
                 </TodoItem>
               )}
             </List>
@@ -51,61 +111,7 @@ class TodoList extends Component {
         </PendingContainer>
       </Container>
     );
-  }
-
-  constructor(props) {
-    super(props);
-
-    this.state = {
-      todoItems: [],
-      newItem: '',
-      account: web3.eth.accounts[0],
-      pending: false,
-      calling: false
-    };
-
-    this.handleSubmit = this.handleSubmit.bind(this);
-    this.deleteTodoItem = this.deleteTodoItem.bind(this);
-  }
-
-  async componentWillMount() {
-    this.todoList = await selectContractInstance(TodoListContract);
-
-    const todoItems = await this.getTodoItems();
-    this.setState({ todoItems });
-  }
-
-  async handleSubmit({ key }) {
-    if (key !== 'Enter') return;
-
-    this.setState({ pending: true });
-    const todoList = await selectContractInstance(TodoListContract);
-    await todoList.addTodoItem(this.state.newItem, { from: this.state.account});
-
-    const todoItems = await this.getTodoItems();
-
-    this.setState({ todoItems, newItem: '', pending: false });
-  }
-
-  async getTodoItems() {
-    this.setState({ calling: true });
-
-    const todoItemsResp = await this.todoList.getTodoItems.call();
-    const todoItems = mapReponseToJSON(
-      todoItemsResp, ['value', 'active'], 'arrayOfObject'
-    );
-
-    this.setState({ calling: false });
-    return todoItems;
-  }
-
-  async deleteTodoItem(position) {
-    this.setState({ pending: true });
-    await this.todoList.deleteTodoItem(position, { from: this.state.account });
-    const todoItems = await this.getTodoItems();
-
-    this.setState({ todoItems, pending: false });
-  }
+    }
 }
 
 export default TodoList;
@@ -161,7 +167,7 @@ const InputText = styled.input`
 `;
 
 const List = styled.ul`
-  width: 440px;
+  width: 400px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -215,6 +221,22 @@ const DestroyBtn = styled(Button)`
   margin-bottom: 11px;
   transition: color 0.2s ease-out;
   cursor: pointer;
+`;
+
+const CompleteBtn = styled(Button)`
+  position: absolute;
+  top: 0;
+  right: -100px;
+  bottom: 0;
+  width: 40px;
+  height: 40px;
+  margin: auto 0;
+  font-size: 30px;
+  color: #cc9a9a;
+  margin-bottom: 11px;
+  transition: color 0.2s ease-out;
+  cursor: pointer;
+  font-size: 14px;
 `;
 
 const PendingContainer = styled.div`
